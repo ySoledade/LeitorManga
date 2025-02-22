@@ -2,10 +2,7 @@ package org.MangaTranslator;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
+import java.awt.event.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.util.ArrayList;
@@ -14,22 +11,20 @@ import javax.imageio.ImageIO;
 
 public class MangaTranslator extends JFrame {
     private BufferedImage mangaImage;
-    private BufferedImage scaledImage;
     private JLabel imageLabel;
     private JTextArea translationBox;
-    private double scaleFactor = 1.0;
+    private OCRProcessor ocrProcessor;
+    private List<File> imageFiles;
+    private int currentImageIndex = 0;
+    private double scaleFactor = 1.0; // Fator de zoom
     private Point selectionStart;
     private Rectangle selectionRect;
-    private OCRProcessor ocrProcessor;
-    private List<File> imageFiles; // Lista de arquivos de imagem na pasta
-    private int currentImageIndex = 0; // Índice da imagem atual
 
     public MangaTranslator(OCRProcessor ocrProcessor) {
         this.ocrProcessor = ocrProcessor;
 
         // Configuração da janela
         setTitle("Manga Translator Pro");
-        setSize(1024, 768);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
 
@@ -47,7 +42,7 @@ public class MangaTranslator extends JFrame {
             }
         };
 
-        // Listeners de mouse
+        // Listeners de mouse para seleção
         imageLabel.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
@@ -80,6 +75,22 @@ public class MangaTranslator extends JFrame {
             }
         });
 
+        // Zoom com scroll do mouse
+        imageLabel.addMouseWheelListener(new MouseAdapter() {
+            @Override
+            public void mouseWheelMoved(MouseWheelEvent e) {
+                double zoomIntensity = 0.1; // Intensidade do zoom
+                if (e.getWheelRotation() < 0) {
+                    // Scroll para cima (aumentar zoom)
+                    scaleFactor *= (1 + zoomIntensity);
+                } else {
+                    // Scroll para baixo (reduzir zoom)
+                    scaleFactor /= (1 + zoomIntensity);
+                }
+                updateImage();
+            }
+        });
+
         // Área de tradução
         translationBox = new JTextArea(3, 20);
         translationBox.setWrapStyleWord(true);
@@ -94,22 +105,12 @@ public class MangaTranslator extends JFrame {
         navigationPanel.add(nextButton);
 
         // Listeners dos botões de navegação
-        prevButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                showPreviousImage();
-            }
-        });
-
-        nextButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                showNextImage();
-            }
-        });
+        prevButton.addActionListener(e -> showPreviousImage());
+        nextButton.addActionListener(e -> showNextImage());
 
         // Montagem da interface
-        add(new JScrollPane(imageLabel), BorderLayout.CENTER);
+        JScrollPane imageScrollPane = new JScrollPane(imageLabel);
+        add(imageScrollPane, BorderLayout.CENTER);
         add(new JScrollPane(translationBox), BorderLayout.SOUTH);
         add(navigationPanel, BorderLayout.NORTH);
 
@@ -146,26 +147,39 @@ public class MangaTranslator extends JFrame {
 
     private void loadImage(File file) {
         try {
-            BufferedImage original = ImageIO.read(file);
-            mangaImage = new BufferedImage(original.getWidth(), original.getHeight(), BufferedImage.TYPE_3BYTE_BGR);
-            mangaImage.getGraphics().drawImage(original, 0, 0, null);
-
-            scaleFactor = Math.min(1.0, Math.min(800.0 / mangaImage.getWidth(), 600.0 / mangaImage.getHeight()));
-            scaledImage = new BufferedImage(
-                    (int)(mangaImage.getWidth() * scaleFactor),
-                    (int)(mangaImage.getHeight() * scaleFactor),
-                    BufferedImage.TYPE_3BYTE_BGR
-            );
-            scaledImage.getGraphics().drawImage(
-                    mangaImage.getScaledInstance(scaledImage.getWidth(), scaledImage.getHeight(), Image.SCALE_SMOOTH),
-                    0, 0, null
-            );
-
-            imageLabel.setIcon(new ImageIcon(scaledImage));
+            mangaImage = ImageIO.read(file);
+            scaleFactor = calculateScaleFactor(mangaImage); // Calcula o fator de escala inicial
+            updateImage();
             setTitle("Manga Translator Pro - Página " + (currentImageIndex + 1) + " de " + imageFiles.size());
         } catch (Exception e) {
             JOptionPane.showMessageDialog(this, "Erro ao carregar imagem: " + e.getMessage());
         }
+    }
+
+    private double calculateScaleFactor(BufferedImage image) {
+        // Define o tamanho máximo da imagem para caber na tela
+        int maxWidth = Toolkit.getDefaultToolkit().getScreenSize().width - 100;
+        int maxHeight = Toolkit.getDefaultToolkit().getScreenSize().height - 200;
+
+        double widthFactor = (double) maxWidth / image.getWidth();
+        double heightFactor = (double) maxHeight / image.getHeight();
+
+        // Usa o menor fator para manter a proporção
+        return Math.min(widthFactor, heightFactor);
+    }
+
+    private void updateImage() {
+        if (mangaImage == null) return;
+
+        // Redimensiona a imagem com base no fator de escala
+        int newWidth = (int)(mangaImage.getWidth() * scaleFactor);
+        int newHeight = (int)(mangaImage.getHeight() * scaleFactor);
+        Image scaledImage = mangaImage.getScaledInstance(newWidth, newHeight, Image.SCALE_SMOOTH);
+        imageLabel.setIcon(new ImageIcon(scaledImage));
+
+        // Ajusta o tamanho da janela para caber na tela
+        pack();
+        setLocationRelativeTo(null); // Centraliza a janela
     }
 
     private void showPreviousImage() {
@@ -183,6 +197,9 @@ public class MangaTranslator extends JFrame {
     }
 
     private void processSelectedArea() {
+        if (mangaImage == null) return;
+
+        // Converte as coordenadas da imagem redimensionada para a original
         int x = (int)(selectionRect.x / scaleFactor);
         int y = (int)(selectionRect.y / scaleFactor);
         int width = (int)(selectionRect.width / scaleFactor);
