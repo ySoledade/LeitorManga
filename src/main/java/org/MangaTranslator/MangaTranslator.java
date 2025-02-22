@@ -2,10 +2,14 @@ package org.MangaTranslator;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 import javax.imageio.ImageIO;
 
 public class MangaTranslator extends JFrame {
@@ -17,12 +21,14 @@ public class MangaTranslator extends JFrame {
     private Point selectionStart;
     private Rectangle selectionRect;
     private OCRProcessor ocrProcessor;
+    private List<File> imageFiles; // Lista de arquivos de imagem na pasta
+    private int currentImageIndex = 0; // Índice da imagem atual
 
     public MangaTranslator(OCRProcessor ocrProcessor) {
         this.ocrProcessor = ocrProcessor;
 
         // Configuração da janela
-        setTitle("Manga Translator");
+        setTitle("Manga Translator Pro");
         setSize(1024, 768);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
@@ -80,17 +86,67 @@ public class MangaTranslator extends JFrame {
         translationBox.setLineWrap(true);
         translationBox.setFont(new Font("Arial", Font.PLAIN, 16));
 
+        // Painel de navegação
+        JPanel navigationPanel = new JPanel();
+        JButton prevButton = new JButton("Anterior");
+        JButton nextButton = new JButton("Próximo");
+        navigationPanel.add(prevButton);
+        navigationPanel.add(nextButton);
+
+        // Listeners dos botões de navegação
+        prevButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                showPreviousImage();
+            }
+        });
+
+        nextButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                showNextImage();
+            }
+        });
+
         // Montagem da interface
         add(new JScrollPane(imageLabel), BorderLayout.CENTER);
         add(new JScrollPane(translationBox), BorderLayout.SOUTH);
+        add(navigationPanel, BorderLayout.NORTH);
 
-        // Carrega a imagem
-        loadImage("/home/yago/Downloads/Tesseract2clean.png");
+        // Selecionar pasta com as imagens
+        selectImageFolder();
     }
 
-    private void loadImage(String path) {
+    private void selectImageFolder() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        int result = fileChooser.showOpenDialog(this);
+
+        if (result == JFileChooser.APPROVE_OPTION) {
+            File folder = fileChooser.getSelectedFile();
+            loadImagesFromFolder(folder);
+            if (!imageFiles.isEmpty()) {
+                loadImage(imageFiles.get(currentImageIndex));
+            }
+        }
+    }
+
+    private void loadImagesFromFolder(File folder) {
+        imageFiles = new ArrayList<>();
+        File[] files = folder.listFiles((dir, name) ->
+                name.endsWith(".jpg") || name.endsWith(".png") || name.endsWith(".jpeg")
+        );
+
+        if (files != null) {
+            for (File file : files) {
+                imageFiles.add(file);
+            }
+        }
+    }
+
+    private void loadImage(File file) {
         try {
-            BufferedImage original = ImageIO.read(new File(path));
+            BufferedImage original = ImageIO.read(file);
             mangaImage = new BufferedImage(original.getWidth(), original.getHeight(), BufferedImage.TYPE_3BYTE_BGR);
             mangaImage.getGraphics().drawImage(original, 0, 0, null);
 
@@ -106,8 +162,23 @@ public class MangaTranslator extends JFrame {
             );
 
             imageLabel.setIcon(new ImageIcon(scaledImage));
+            setTitle("Manga Translator Pro - Página " + (currentImageIndex + 1) + " de " + imageFiles.size());
         } catch (Exception e) {
             JOptionPane.showMessageDialog(this, "Erro ao carregar imagem: " + e.getMessage());
+        }
+    }
+
+    private void showPreviousImage() {
+        if (currentImageIndex > 0) {
+            currentImageIndex--;
+            loadImage(imageFiles.get(currentImageIndex));
+        }
+    }
+
+    private void showNextImage() {
+        if (currentImageIndex < imageFiles.size() - 1) {
+            currentImageIndex++;
+            loadImage(imageFiles.get(currentImageIndex));
         }
     }
 
