@@ -7,111 +7,141 @@ import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import javax.imageio.ImageIO;
-import org.bytedeco.tesseract.TessBaseAPI;
 
 public class MangaTranslator extends JFrame {
     private BufferedImage mangaImage;
+    private BufferedImage scaledImage;
     private JLabel imageLabel;
     private JTextArea translationBox;
-    private TessBaseAPI tesseract;
-    private double scaleFactor = 1.0; // Para ajuste de coordenadas
+    private double scaleFactor = 1.0;
+    private Point selectionStart;
+    private Rectangle selectionRect;
+    private OCRProcessor ocrProcessor;
 
-    public MangaTranslator() {
+    public MangaTranslator(OCRProcessor ocrProcessor) {
+        this.ocrProcessor = ocrProcessor;
+
+        // Configuração da janela
         setTitle("Manga Translator");
-        setSize(800, 600);
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setSize(1024, 768);
+        setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
 
-        imageLabel = new JLabel();
+        // Componente de imagem com seleção
+        imageLabel = new JLabel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                if (selectionRect != null) {
+                    Graphics2D g2d = (Graphics2D) g.create();
+                    g2d.setColor(new Color(255, 0, 0, 150));
+                    g2d.drawRect(selectionRect.x, selectionRect.y, selectionRect.width, selectionRect.height);
+                    g2d.dispose();
+                }
+            }
+        };
+
+        // Listeners de mouse
         imageLabel.addMouseListener(new MouseAdapter() {
             @Override
-            public void mouseClicked(MouseEvent e) {
-                processOCR(
-                        (int)(e.getX() / scaleFactor),
-                        (int)(e.getY() / scaleFactor)
-                );
+            public void mousePressed(MouseEvent e) {
+                selectionStart = e.getPoint();
+                selectionRect = new Rectangle(selectionStart.x, selectionStart.y, 0, 0);
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                if (selectionRect != null && selectionRect.width > 10 && selectionRect.height > 10) {
+                    processSelectedArea();
+                }
+                selectionStart = null;
+                selectionRect = null;
+                imageLabel.repaint();
             }
         });
+
+        imageLabel.addMouseMotionListener(new MouseAdapter() {
+            @Override
+            public void mouseDragged(MouseEvent e) {
+                if (selectionStart != null) {
+                    int x = Math.min(selectionStart.x, e.getX());
+                    int y = Math.min(selectionStart.y, e.getY());
+                    int width = Math.abs(e.getX() - selectionStart.x);
+                    int height = Math.abs(e.getY() - selectionStart.y);
+                    selectionRect.setBounds(x, y, width, height);
+                    imageLabel.repaint();
+                }
+            }
+        });
+
+        // Área de tradução
+        translationBox = new JTextArea(3, 20);
+        translationBox.setWrapStyleWord(true);
+        translationBox.setLineWrap(true);
+        translationBox.setFont(new Font("Arial", Font.PLAIN, 16));
+
+        // Montagem da interface
         add(new JScrollPane(imageLabel), BorderLayout.CENTER);
+        add(new JScrollPane(translationBox), BorderLayout.SOUTH);
 
-        translationBox = new JTextArea("Click on a text bubble to translate");
-        translationBox.setEditable(false);
-        add(translationBox, BorderLayout.SOUTH);
-
-        setupTesseract();
-        loadMangaImage("manga_page.jpg");
+        // Carrega a imagem
+        loadImage("/home/yago/Downloads/Tesseract2clean.png");
     }
 
-    private void setupTesseract() {
-        tesseract = new TessBaseAPI();
-        String tessDataPath = "/usr/share/tesseract-ocr/4.00/"; // Ajuste para seu sistema
-
-        if (tesseract.Init(tessDataPath, "eng") != 0) {
-            JOptionPane.showMessageDialog(
-                    this,
-                    "Failed to initialize Tesseract OCR.",
-                    "Error",
-                    JOptionPane.ERROR_MESSAGE
-            );
-            System.exit(1);
-        }
-    }
-
-    private void loadMangaImage(String path) {
+    private void loadImage(String path) {
         try {
-            mangaImage = ImageIO.read(new File(path));
+            BufferedImage original = ImageIO.read(new File(path));
+            mangaImage = new BufferedImage(original.getWidth(), original.getHeight(), BufferedImage.TYPE_3BYTE_BGR);
+            mangaImage.getGraphics().drawImage(original, 0, 0, null);
 
-            // Ajusta a escala da imagem para caber na janela
-            int newWidth = Math.min(mangaImage.getWidth(), 780);
-            scaleFactor = (double) newWidth / mangaImage.getWidth();
-            int newHeight = (int)(mangaImage.getHeight() * scaleFactor);
-
-            Image scaledImage = mangaImage.getScaledInstance(
-                    newWidth,
-                    newHeight,
-                    Image.SCALE_SMOOTH
+            scaleFactor = Math.min(1.0, Math.min(800.0 / mangaImage.getWidth(), 600.0 / mangaImage.getHeight()));
+            scaledImage = new BufferedImage(
+                    (int)(mangaImage.getWidth() * scaleFactor),
+                    (int)(mangaImage.getHeight() * scaleFactor),
+                    BufferedImage.TYPE_3BYTE_BGR
+            );
+            scaledImage.getGraphics().drawImage(
+                    mangaImage.getScaledInstance(scaledImage.getWidth(), scaledImage.getHeight(), Image.SCALE_SMOOTH),
+                    0, 0, null
             );
 
             imageLabel.setIcon(new ImageIcon(scaledImage));
         } catch (Exception e) {
-            JOptionPane.showMessageDialog(
-                    this,
-                    "Failed to load image.",
-                    "Error",
-                    JOptionPane.ERROR_MESSAGE
-            );
+            JOptionPane.showMessageDialog(this, "Erro ao carregar imagem: " + e.getMessage());
         }
     }
 
-    private void processOCR(int x, int y) {
+    private void processSelectedArea() {
+        int x = (int)(selectionRect.x / scaleFactor);
+        int y = (int)(selectionRect.y / scaleFactor);
+        int width = (int)(selectionRect.width / scaleFactor);
+        int height = (int)(selectionRect.height / scaleFactor);
+
         try {
-            // Simulação de ROI (Region of Interest) - área de 100x50 pixels ao redor do clique
-            // Na implementação real, você precisaria detectar os limites do balão de texto
-            tesseract.SetImage(mangaImage);
-            tesseract.SetRectangle(x, y, 100, 50);
-
-            String extractedText = tesseract.GetUTF8Text().trim();
-            String translatedText = translateText(extractedText);
-            translationBox.setText("Original: " + extractedText + "\nTradução: " + translatedText);
+            String text = ocrProcessor.extractText(mangaImage, x, y, width, height);
+            translationBox.setText("Texto extraído: " + text);
         } catch (Exception e) {
-            translationBox.setText("Error processing OCR: " + e.getMessage());
+            translationBox.setText("Erro no OCR: " + e.getMessage());
         }
-    }
-
-    private String translateText(String text) {
-        // Simulação de tradução (substituir por API real)
-        return "[Traduzido] " + text;
     }
 
     @Override
     public void dispose() {
-        if (tesseract != null) {
-            tesseract.close();
-        }
+        ocrProcessor.dispose();
         super.dispose();
     }
 
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> new MangaTranslator().setVisible(true));
+        // Usar DummyOCR para testes sem Tesseract
+        OCRProcessor ocrProcessor = new DummyOCR();
+
+        // Ou usar TesseractOCR para a versão real
+        // OCRProcessor ocrProcessor = new TesseractOCR();
+
+        SwingUtilities.invokeLater(() -> {
+            MangaTranslator app = new MangaTranslator(ocrProcessor);
+            app.setVisible(true);
+            app.setLocationRelativeTo(null);
+        });
     }
 }
