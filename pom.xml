@@ -5,15 +5,22 @@
     <version>1.0-SNAPSHOT</version>
 
     <properties>
-        <javacpp.version>1.5.9</javacpp.version> <!-- Versão estável mais recente -->
+        <javacpp.version>1.5.10</javacpp.version> <!-- Versão estável mais recente -->
     </properties>
 
-
     <dependencies>
+        <!-- Dependência do Tesseract OCR com todas as bibliotecas nativas -->
         <dependency>
             <groupId>org.bytedeco</groupId>
-            <artifactId>tesseract</artifactId>
-            <version>5.3.4-1.5.10</version>
+            <artifactId>tesseract-platform</artifactId>
+            <version>5.3.4-${javacpp.version}</version>
+        </dependency>
+
+        <!-- JavaCPP (necessário para carregar bibliotecas nativas) -->
+        <dependency>
+            <groupId>org.bytedeco</groupId>
+            <artifactId>javacpp</artifactId>
+            <version>${javacpp.version}</version>
         </dependency>
     </dependencies>
 

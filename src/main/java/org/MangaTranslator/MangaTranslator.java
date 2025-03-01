@@ -172,8 +172,8 @@ public class MangaTranslator extends JFrame {
         if (mangaImage == null) return;
 
         // Redimensiona a imagem com base no fator de escala
-        int newWidth = (int)(mangaImage.getWidth() * scaleFactor);
-        int newHeight = (int)(mangaImage.getHeight() * scaleFactor);
+        int newWidth = (int) (mangaImage.getWidth() * scaleFactor);
+        int newHeight = (int) (mangaImage.getHeight() * scaleFactor);
         Image scaledImage = mangaImage.getScaledInstance(newWidth, newHeight, Image.SCALE_SMOOTH);
         imageLabel.setIcon(new ImageIcon(scaledImage));
 
@@ -200,10 +200,10 @@ public class MangaTranslator extends JFrame {
         if (mangaImage == null) return;
 
         // Converte as coordenadas da imagem redimensionada para a original
-        int x = (int)(selectionRect.x / scaleFactor);
-        int y = (int)(selectionRect.y / scaleFactor);
-        int width = (int)(selectionRect.width / scaleFactor);
-        int height = (int)(selectionRect.height / scaleFactor);
+        int x = (int) (selectionRect.x / scaleFactor);
+        int y = (int) (selectionRect.y / scaleFactor);
+        int width = (int) (selectionRect.width / scaleFactor);
+        int height = (int) (selectionRect.height / scaleFactor);
 
         try {
             String text = ocrProcessor.extractText(mangaImage, x, y, width, height);
@@ -220,16 +220,30 @@ public class MangaTranslator extends JFrame {
     }
 
     public static void main(String[] args) {
-        // Usar DummyOCR para testes sem Tesseract
-        OCRProcessor ocrProcessor = new DummyOCR();
+        try {
+            // Usar a implementação real do Tesseract
+            OCRProcessor ocrProcessor = new TesseractOCR();
 
-        // Ou usar TesseractOCR para a versão real
-        // OCRProcessor ocrProcessor = new TesseractOCR();
+            SwingUtilities.invokeLater(() -> {
+                MangaTranslator app = new MangaTranslator(ocrProcessor);
+                app.setVisible(true);
+                app.setLocationRelativeTo(null);
+            });
+        } catch (Exception e) {
+            System.err.println("Erro ao inicializar OCR: " + e.getMessage());
+            e.printStackTrace();
 
-        SwingUtilities.invokeLater(() -> {
-            MangaTranslator app = new MangaTranslator(ocrProcessor);
-            app.setVisible(true);
-            app.setLocationRelativeTo(null);
-        });
+            // Fallback para DummyOCR se o Tesseract falhar
+            JOptionPane.showMessageDialog(null,
+                    "Não foi possível inicializar o Tesseract OCR: " + e.getMessage() +
+                            "\nUsando modo de teste sem OCR.",
+                    "Erro de Inicialização", JOptionPane.ERROR_MESSAGE);
+
+            SwingUtilities.invokeLater(() -> {
+                MangaTranslator app = new MangaTranslator(new DummyOCR());
+                app.setVisible(true);
+                app.setLocationRelativeTo(null);
+            });
+        }
     }
 }
